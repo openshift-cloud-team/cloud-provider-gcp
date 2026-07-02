@@ -32,15 +32,11 @@ find_files() {
         -wholename './output' \
         -o -wholename './.git' \
         -o -wholename './_artifacts' \
-        -o -wholename './bazel-bin' \
-        -o -wholename './bazel-cloud-provider-gcp' \
-        -o -wholename './bazel-out' \
-        -o -wholename './bazel-testlogs' \
         -o -wholename './_gopath' \
         -o -wholename './release' \
         -o -wholename '*/vendor/*' \
       \) -prune \
-    \) -name '*.go'
+    \) -name '*.go' -print0
 }
 
-find_files | xargs gofmt -s -w
+find_files | xargs -0 gofmt -s -w

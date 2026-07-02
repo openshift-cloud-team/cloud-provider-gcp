@@ -48,14 +48,18 @@ var _ = Describe("[cloud-provider-gcp-e2e] Firewall Rules", func() {
 		framework.ExpectNoError(err)
 
 		By("Checking well known ports on master and nodes are not exposed externally")
-		nodeAddr := e2enode.FirstAddress(nodes, v1.NodeExternalIP)
+		nodeExternalIPs := e2enode.CollectAddresses(nodes, v1.NodeExternalIP)
+		nodeAddr := ""
+		if len(nodeExternalIPs) > 0 {
+			nodeAddr = nodeExternalIPs[0]
+		}
 		if nodeAddr != "" {
 			assertNotReachableHTTPTimeout(nodeAddr, "/", ports.KubeletPort, firewallTestTCPTimeout, false)
 			assertNotReachableHTTPTimeout(nodeAddr, "/", ports.KubeletReadOnlyPort, firewallTestTCPTimeout, false)
 			assertNotReachableHTTPTimeout(nodeAddr, "/", ports.ProxyStatusPort, firewallTestTCPTimeout, false)
 		}
 
-		controlPlaneAddresses := framework.GetControlPlaneAddresses(ctx, cs)
+		controlPlaneAddresses := controlPlaneAddresses(ctx, f)
 		for _, instanceAddress := range controlPlaneAddresses {
 			assertNotReachableHTTPTimeout(instanceAddress, "/healthz", ports.KubeControllerManagerPort, firewallTestTCPTimeout, true)
 			assertNotReachableHTTPTimeout(instanceAddress, "/healthz", kubeschedulerconfig.DefaultKubeSchedulerPort, firewallTestTCPTimeout, true)
@@ -71,4 +75,17 @@ func assertNotReachableHTTPTimeout(ip, path string, port int, timeout time.Durat
 	if result.Code != 0 {
 		framework.Failf("Was unexpectedly able to reach %s:%d", ip, port)
 	}
+}
+
+func controlPlaneAddresses(ctx context.Context, f *framework.Framework) []string {
+	nodes := framework.GetControlPlaneNodes(ctx, f.ClientSet)
+	var ips []string
+	for _, node := range nodes.Items {
+		for _, addr := range node.Status.Addresses {
+			if addr.Type == v1.NodeInternalIP {
+				ips = append(ips, addr.Address)
+			}
+		}
+	}
+	return ips
 }

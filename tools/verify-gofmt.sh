@@ -25,39 +25,28 @@ KUBE_ROOT=$(dirname "${BASH_SOURCE[0]}")/..
 
 cd "${KUBE_ROOT}"
 
-# Prefer bazel's gofmt.
-gofmt="external/io_bazel_rules_go_toolchain/bin/gofmt"
-if [[ ! -x "${gofmt}" ]]; then
-  gofmt=$(which gofmt)
-  #kube::golang::verify_go_version
-fi
+gofmt=$(which gofmt)
 
 find_files() {
   find . -not \( \
       \( \
         -wholename './output' \
         -o -wholename './.git' \
-        -o -wholename './_artifacts' \
-        -o -wholename './bazel-bin' \
-        -o -wholename './bazel-cloud-provider-gcp' \
-        -o -wholename './bazel-out' \
-        -o -wholename './bazel-testlogs' \
         -o -wholename './_gopath' \
         -o -wholename './release' \
         -o -wholename '*/vendor/*' \
       \) -prune \
-    \) -name '*.go'
+    \) -name '*.go' -print0
 }
 
 # gofmt exits with non-zero exit code if it finds a problem unrelated to
 # formatting (e.g., a file does not parse correctly). Without "|| true" this
 # would have led to no useful error message from gofmt, because the script would
 # have failed before getting to the "echo" in the block below.
-diff=$(find_files | xargs "${gofmt}" -d -s 2>&1) || true
+diff=$(find_files | xargs -0 "${gofmt}" -d -s 2>&1) || true
 if [[ -n "${diff}" ]]; then
   echo "${diff}" >&2
   echo >&2
   echo "Run ./tools/update-gofmt.sh" >&2
   exit 1
 fi
-

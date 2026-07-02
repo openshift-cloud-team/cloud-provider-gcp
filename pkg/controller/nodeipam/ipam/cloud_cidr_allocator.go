@@ -28,6 +28,7 @@ import (
 	"time"
 
 	networkv1 "github.com/GoogleCloudPlatform/gke-networking-api/apis/network/v1"
+	"golang.org/x/time/rate"
 	"google.golang.org/api/compute/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -95,7 +96,9 @@ type cloudCIDRAllocator struct {
 	// NewCloudCIDRAllocator.
 	nodeLister corelisters.NodeLister
 	// nodesSynced returns true if the node shared informer has been synced at least once.
-	nodesSynced cache.InformerSynced
+	nodesSynced    cache.InformerSynced
+	networksSynced cache.InformerSynced
+	gnpsSynced     cache.InformerSynced
 
 	recorder          record.EventRecorder
 	queue             workqueue.RateLimitingInterface
@@ -141,14 +144,23 @@ func NewCloudCIDRAllocator(client clientset.Interface, cloud cloudprovider.Inter
 	}
 
 	ca := &cloudCIDRAllocator{
-		client:                client,
-		cloud:                 gceCloud,
-		networksLister:        nwInformer.Lister(),
-		gnpLister:             gnpInformer.Lister(),
-		nodeLister:            nodeInformer.Lister(),
-		nodesSynced:           nodeInformer.Informer().HasSynced,
-		recorder:              recorder,
-		queue:                 workqueue.NewRateLimitingQueueWithConfig(workqueue.DefaultControllerRateLimiter(), workqueue.RateLimitingQueueConfig{Name: workqueueName}),
+		client:         client,
+		cloud:          gceCloud,
+		networksLister: nwInformer.Lister(),
+		gnpLister:      gnpInformer.Lister(),
+		nodeLister:     nodeInformer.Lister(),
+		nodesSynced:    nodeInformer.Informer().HasSynced,
+		networksSynced: nwInformer.Informer().HasSynced,
+		gnpsSynced:     gnpInformer.Informer().HasSynced,
+		recorder:       recorder,
+		queue: workqueue.NewRateLimitingQueueWithConfig(
+			workqueue.NewMaxOfRateLimiter(
+				workqueue.NewItemExponentialFailureRateLimiter(updateRetryTimeout, maxUpdateRetryTimeout),
+				// This is the default BucketRatelimiter used by DefaultControllerRateLimiter.
+				&workqueue.BucketRateLimiter{Limiter: rate.NewLimiter(rate.Limit(10), 100)},
+			),
+			workqueue.RateLimitingQueueConfig{Name: workqueueName},
+		),
 		stackType:             stackType,
 		enableMultiNetworking: enableMultiNetworking,
 	}
@@ -289,7 +301,12 @@ func (ca *cloudCIDRAllocator) Run(stopCh <-chan struct{}) {
 	klog.Infof("Starting cloud CIDR allocator")
 	defer klog.Infof("Shutting down cloud CIDR allocator")
 
-	if !cache.WaitForNamedCacheSync("cidrallocator", stopCh, ca.nodesSynced) {
+	syncFuncs := []cache.InformerSynced{ca.nodesSynced}
+	if ca.enableMultiNetworking {
+		syncFuncs = append(syncFuncs, ca.networksSynced, ca.gnpsSynced)
+	}
+
+	if !cache.WaitForNamedCacheSync("cidrallocator", stopCh, syncFuncs...) {
 		return
 	}
 

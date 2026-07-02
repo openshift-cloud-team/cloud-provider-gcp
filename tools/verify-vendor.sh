@@ -59,22 +59,31 @@ ret=0
 
 pushd "${KUBE_ROOT}" > /dev/null 2>&1
   # Test for diffs
-  if ! _out="$(diff -Naupr --ignore-matching-lines='^\s*\"GoVersion\":' go.mod "${_kubetmp}/go.mod")"; then
+  if ! _out="$(diff -Naupr --no-dereference --ignore-matching-lines='^\s*\"GoVersion\":' go.mod "${_kubetmp}/go.mod")"; then
     echo "Your go.mod file is different:" >&2
     echo "${_out}" >&2
     echo "Vendor Verify failed." >&2
     echo "If you're seeing this locally, run the below command to fix your go.mod:" >&2
-    echo "hack/update_vendor.sh" >&2
+    echo "tools/update_vendor.sh" >&2
     ret=1
   fi
 
-  if ! _out="$(diff -Naupr -x "BUILD" -x "AUTHORS*" -x "CONTRIBUTORS*" vendor "${_kubetmp}/vendor")"; then
+  if ! _out="$(diff -Naupr --no-dereference --ignore-matching-lines='^\s*\"GoVersion\":' go.work "${_kubetmp}/go.work")"; then
+    echo "Your go.work file is different:" >&2
+    echo "${_out}" >&2
+    echo "Vendor Verify failed." >&2
+    echo "If you're seeing this locally, run the below command to fix your go.work:" >&2
+    echo "tools/update_vendor.sh" >&2
+    ret=1
+  fi
+
+  if ! _out="$(diff -Naupr --no-dereference -x "AUTHORS*" -x "CONTRIBUTORS*" vendor "${_kubetmp}/vendor")"; then
     echo "Your vendored results are different:" >&2
     echo "${_out}" >&2
     echo "Vendor Verify failed." >&2
     echo "${_out}" > vendordiff.patch
     echo "If you're seeing this locally, run the below command to fix your directories:" >&2
-    echo "hack/update_vendor.sh" >&2
+    echo "tools/update_vendor.sh" >&2
     ret=1
   fi
 
