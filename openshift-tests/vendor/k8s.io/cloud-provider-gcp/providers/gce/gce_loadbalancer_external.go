@@ -67,6 +67,10 @@ func (g *Cloud) ensureExternalLoadBalancer(clusterName string, clusterID string,
 		return nil, cloudprovider.ImplementedElsewhere
 	}
 
+	if err := g.processMixedProtocolCheck(context.TODO(), apiService, false); err != nil {
+		return nil, err
+	}
+
 	nm := types.NamespacedName{Namespace: apiService.Namespace, Name: apiService.Name}
 	metricsState := L4NetLBServiceState{
 		Status:       StatusError,
@@ -320,6 +324,10 @@ func (g *Cloud) updateExternalLoadBalancer(clusterName string, service *v1.Servi
 	// Skip service handling if it uses Regional Backend Services and handled by other controllers
 	if !shouldProcessNetLB(service, nil, g.enableRBSDefaultForL4NetLB) {
 		return cloudprovider.ImplementedElsewhere
+	}
+
+	if err := g.processMixedProtocolCheck(context.TODO(), service, true); err != nil {
+		return err
 	}
 
 	if err := addFinalizer(service, g.client.CoreV1(), NetLBFinalizerV1); err != nil {
@@ -591,7 +599,7 @@ func (g *Cloud) ensureTargetPoolAndHealthCheck(tpExists, tpNeedsRecreation bool,
 				return fmt.Errorf("failed to ensure health check for %v port %d path %v: %v", loadBalancerName, hcToCreate.Port, hcToCreate.RequestPath, err)
 			}
 			// Check whether it is nodes health check, which has different name from the load-balancer.
-			isNodesHealthCheck := hcToCreate.Name != serviceName.Name
+			isNodesHealthCheck := hcToCreate.Name != loadBalancerName
 			if isNodesHealthCheck {
 				// Lock to prevent necessary nodes health check / firewall gets deleted.
 				g.sharedResourceLock.Lock()
@@ -971,11 +979,6 @@ func translateAffinityType(affinityType v1.ServiceAffinity) string {
 }
 
 func (g *Cloud) firewallNeedsUpdate(name, serviceName, ipAddress string, ports []v1.ServicePort, sourceRanges utilnet.IPNetSet, priority int64) (exists bool, needsUpdate bool, err error) {
-	if g.firewallRulesManagement == firewallRulesManagementDisabled {
-		klog.V(2).Infof("firewallNeedsUpdate(%v): firewall rules are unmanaged", name)
-		return false, false, nil
-	}
-
 	fw, err := g.GetFirewall(MakeFirewallName(name))
 	if err != nil {
 		if isHTTPErrorCode(err, http.StatusNotFound) {
@@ -1025,11 +1028,6 @@ func (g *Cloud) firewallNeedsUpdate(name, serviceName, ipAddress string, ports [
 }
 
 func (g *Cloud) ensureHTTPHealthCheckFirewall(svc *v1.Service, serviceName, ipAddress, region, clusterID string, hosts []*gceInstance, hcName string, hcPort int32, isNodesHealthCheck bool) error {
-	if g.firewallRulesManagement == firewallRulesManagementDisabled {
-		klog.V(2).Infof("ensureHTTPHealthCheckFirewall(%v): firewall rules are unmanaged", hcName)
-		return nil
-	}
-
 	// Prepare the firewall params for creating / checking.
 	desc := fmt.Sprintf(`{"kubernetes.io/cluster-id":"%s"}`, clusterID)
 	if !isNodesHealthCheck {
@@ -1107,17 +1105,6 @@ func (g *Cloud) createFirewall(svc *v1.Service, name, desc, destinationIP string
 	if err != nil {
 		return err
 	}
-
-	if g.firewallRulesManagement == firewallRulesManagementDisabled {
-		klog.V(2).Infof("createFirewall(%v): firewall rules are unmanaged", name)
-		project := g.NetworkProjectID()
-		if project == "" {
-			project = g.ProjectID()
-		}
-		g.raiseFirewallChangeNeededEvent(svc, FirewallToGCloudCreateCmd(firewall, project))
-		return nil
-	}
-
 	if err = g.CreateFirewall(firewall); err != nil {
 		if isHTTPErrorCode(err, http.StatusConflict) {
 			return nil
