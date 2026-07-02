@@ -61,11 +61,6 @@ func (in *DynamicResourcesArgs) DeepCopyInto(out *DynamicResourcesArgs) {
 		*out = new(v1.Duration)
 		**out = **in
 	}
-	if in.BindingTimeout != nil {
-		in, out := &in.BindingTimeout, &out.BindingTimeout
-		*out = new(v1.Duration)
-		**out = **in
-	}
 	return
 }
 

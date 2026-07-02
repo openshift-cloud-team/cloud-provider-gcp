@@ -16,7 +16,5 @@ limitations under the License.
 
 // +k8s:deepcopy-gen=package
 // +k8s:conversion-gen=k8s.io/component-base/config
-// +k8s:openapi-gen=true
-// +k8s:openapi-model-package=io.k8s.component-base.config.v1alpha1
 
 package v1alpha1

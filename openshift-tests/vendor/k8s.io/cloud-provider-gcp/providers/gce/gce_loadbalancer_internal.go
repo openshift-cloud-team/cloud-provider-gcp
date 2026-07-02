@@ -54,10 +54,7 @@ const (
 	labelGKESubnetworkName = "cloud.google.com/gke-node-pool-subnet"
 )
 
-// ensureInternalLoadBalancer is the internal implementation of LoadBalancer.EnsureLoadBalancer.
-func (g *Cloud) ensureInternalLoadBalancer(clusterName, clusterID string, svc *v1.Service, existingFwdRule *compute.ForwardingRule, nodes []*v1.Node) (*lbSyncResult, error) {
-	syncResult := newLBSyncResult()
-
+func (g *Cloud) ensureInternalLoadBalancer(clusterName, clusterID string, svc *v1.Service, existingFwdRule *compute.ForwardingRule, nodes []*v1.Node) (*v1.LoadBalancerStatus, error) {
 	// Process services with LoadBalancerClass "networking.gke.io/l4-regional-internal-legacy" used for this controller.
 	// LoadBalancerClass can't be updated so we know this controller should process the ILB.
 	if existingFwdRule == nil && !hasFinalizer(svc, ILBFinalizerV1) && !hasLoadBalancerClass(svc, LegacyRegionalInternalLoadBalancerClass) {
@@ -223,7 +220,6 @@ func (g *Cloud) ensureInternalLoadBalancer(clusterName, clusterID string, svc *v
 	if err != nil {
 		return nil, err
 	}
-	syncResult.annotations[backendServiceKey] = backendServiceName
 
 	if fwdRuleDeleted || existingFwdRule == nil {
 		// existing rule has been deleted, pass in nil
@@ -263,8 +259,7 @@ func (g *Cloud) ensureInternalLoadBalancer(clusterName, clusterID string, svc *v
 
 	status := &v1.LoadBalancerStatus{}
 	status.Ingress = []v1.LoadBalancerIngress{{IP: updatedFwdRule.IPAddress}}
-	syncResult.status = status
-	return syncResult, nil
+	return status, nil
 }
 
 func removeNodesInNonDefaultNetworks(nodes []*v1.Node, defaultSubnetName string) []*v1.Node {
@@ -600,7 +595,6 @@ func (g *Cloud) ensureInternalFirewalls(loadBalancerName, ipAddress, clusterID s
 	if err != nil {
 		return err
 	}
-
 	err = g.ensureInternalFirewall(svc, MakeFirewallName(loadBalancerName), fwDesc, ipAddress, sourceRanges.StringSlice(), portRanges, protocol, nodes, loadBalancerName)
 	if err != nil {
 		return err

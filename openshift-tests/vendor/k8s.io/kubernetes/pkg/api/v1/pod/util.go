@@ -418,16 +418,11 @@ func IsContainerRestartable(pod v1.PodSpec, container v1.Container) bool {
 // level policy are specified, pod-level restart policy is used.
 func ContainerShouldRestart(container v1.Container, pod v1.PodSpec, exitCode int32) bool {
 	if container.RestartPolicy != nil {
-		rule, ok := FindMatchingContainerRestartRule(container, exitCode)
+		rule, ok := findMatchingContainerRestartRule(container, exitCode)
 		if ok {
 			switch rule.Action {
 			case v1.ContainerRestartRuleActionRestart:
 				return true
-			case v1.ContainerRestartRuleActionRestartAllContainers:
-				if utilfeature.DefaultFeatureGate.Enabled(features.RestartAllContainersOnContainerExits) {
-					return true
-				}
-				// If feature is not enabled, fallback to container-level policy.
 			default:
 				// Do nothing, fallback to container-level restart policy.
 			}
@@ -459,10 +454,10 @@ func ContainerShouldRestart(container v1.Container, pod v1.PodSpec, exitCode int
 	}
 }
 
-// FindMatchingContainerRestartRule returns a rule and true if the exitCode matched
+// findMatchingContainerRestartRule returns a rule and true if the exitCode matched
 // one of the restart rules for the given container. Returns and empty rule and
 // false if no rules matched.
-func FindMatchingContainerRestartRule(container v1.Container, exitCode int32) (rule v1.ContainerRestartRule, found bool) {
+func findMatchingContainerRestartRule(container v1.Container, exitCode int32) (rule v1.ContainerRestartRule, found bool) {
 	for _, rule := range container.RestartPolicyRules {
 		if rule.ExitCodes != nil {
 			exitCodeMatched := false
@@ -486,30 +481,6 @@ func FindMatchingContainerRestartRule(container v1.Container, exitCode int32) (r
 		}
 	}
 	return v1.ContainerRestartRule{}, false
-}
-
-// AllContainersCouldRestart returns true if all containers could be restarted
-// for the given pod. This is true if any container has a RestartAllContainers
-// action.
-func AllContainersCouldRestart(pod *v1.PodSpec) bool {
-	if pod == nil {
-		return false
-	}
-	for _, container := range pod.InitContainers {
-		for _, rule := range container.RestartPolicyRules {
-			if rule.Action == v1.ContainerRestartRuleActionRestartAllContainers {
-				return true
-			}
-		}
-	}
-	for _, container := range pod.Containers {
-		for _, rule := range container.RestartPolicyRules {
-			if rule.Action == v1.ContainerRestartRuleActionRestartAllContainers {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // CalculatePodStatusObservedGeneration calculates the observedGeneration for the pod status.

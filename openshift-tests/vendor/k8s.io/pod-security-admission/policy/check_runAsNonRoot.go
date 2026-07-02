@@ -26,8 +26,7 @@ import (
 )
 
 /*
-Containers must be required to run as non-root users,
-unless the pod is in a user namespace ("hostUsers: false").
+Containers must be required to run as non-root users.
 
 **Restricted Fields:**
 
@@ -38,7 +37,6 @@ spec.initContainers[*].securityContext.runAsNonRoot
 **Allowed Values:**
 true
 undefined/null at container-level if pod-level is set to true
-any value if "hostUsers" is false
 */
 
 func init() {
@@ -54,28 +52,18 @@ func CheckRunAsNonRoot() Check {
 		Versions: []VersionedCheck{
 			{
 				MinimumVersion: api.MajorMinorVersion(1, 0),
-				CheckPod:       runAsNonRoot1_0,
-			},
-			{
-				MinimumVersion: api.MajorMinorVersion(1, 35),
-				CheckPod:       runAsNonRoot1_35,
+				CheckPod:       runAsNonRoot_1_0,
 			},
 		},
 	}
 }
 
-func runAsNonRoot1_35(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
+func runAsNonRoot_1_0(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
 	// See KEP-127: https://github.com/kubernetes/enhancements/blob/308ba8d/keps/sig-node/127-user-namespaces/README.md?plain=1#L411-L447
-	// In the 1.0 policy, this relaxation was gated on a perma-alpha feature gate.
-	// Instead of relaxing 1.0 policy, drop the relaxation there, and add it unconditionally here.
 	if relaxPolicyForUserNamespacePod(podSpec) {
 		return CheckResult{Allowed: true}
 	}
 
-	return runAsNonRoot1_0(podMetadata, podSpec)
-}
-
-func runAsNonRoot1_0(podMetadata *metav1.ObjectMeta, podSpec *corev1.PodSpec) CheckResult {
 	// things that explicitly set runAsNonRoot=false
 	var badSetters []string
 

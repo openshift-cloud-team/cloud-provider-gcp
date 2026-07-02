@@ -51,7 +51,6 @@ type Config struct {
 	NodeSelection          NodeSelection
 	ImageID                imageutils.ImageID
 	PodFSGroupChangePolicy *v1.PodFSGroupChangePolicy
-	PodSELinuxChangePolicy *v1.PodSELinuxChangePolicy
 }
 
 // CreateUnschedulablePod with given claims based on node selector
@@ -224,9 +223,6 @@ func MakePodSpec(podConfig *Config) *v1.PodSpec {
 
 	if podConfig.PodFSGroupChangePolicy != nil {
 		podSpec.SecurityContext.FSGroupChangePolicy = podConfig.PodFSGroupChangePolicy
-	}
-	if podConfig.PodSELinuxChangePolicy != nil {
-		podSpec.SecurityContext.SELinuxChangePolicy = podConfig.PodSELinuxChangePolicy
 	}
 
 	setVolumes(podSpec, podConfig.PVCs, podConfig.InlineVolumeSources, podConfig.PVCsReadOnly)

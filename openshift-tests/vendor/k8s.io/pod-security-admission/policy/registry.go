@@ -46,7 +46,7 @@ type checkRegistry struct {
 // 2. Check.Level must be either Baseline or Restricted
 // 3. Checks must have a non-empty set of versions, sorted in a strictly increasing order
 // 4. Check.Versions cannot include 'latest'
-func NewEvaluator(checks []Check, emulationVersion *api.Version) (*checkRegistry, error) {
+func NewEvaluator(checks []Check) (Evaluator, error) {
 	if err := validateChecks(checks); err != nil {
 		return nil, err
 	}
@@ -55,12 +55,6 @@ func NewEvaluator(checks []Check, emulationVersion *api.Version) (*checkRegistry
 		restrictedChecks: map[api.Version][]CheckPodFn{},
 	}
 	populate(r, checks)
-
-	// lower the max version if we're emulating an older minor
-	if emulationVersion != nil && (*emulationVersion).Older(r.maxVersion) {
-		r.maxVersion = *emulationVersion
-	}
-
 	return r, nil
 }
 

@@ -12,7 +12,6 @@ reviewers:
   - andrewsykim
   - deads2k
   - cheftako
-  - jefftree
   - sig-apps-reviewers
 labels:
   - sig/apps
